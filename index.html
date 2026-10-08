@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Flowlab</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314161c'/%3E%3Cpath d='M6 20v-8M11 24V8M16 18v-4M21 22V10M26 19v-6' stroke='%239d8cff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Flowlab</span>
+      </div>
+      <nav class="tabs" aria-label="Écrans">
+        <button class="tab" data-screen="projects" aria-current="page">Projets</button>
+        <button class="tab" data-screen="prod" disabled>Prod</button>
+        <button class="tab" disabled title="Étapes 4 à 6 du plan">Yaourt <small>bientôt</small></button>
+        <button class="tab" disabled title="Étape 8 du plan">Texte <small>bientôt</small></button>
+      </nav>
+      <button class="icon-btn" id="help-btn" title="Raccourcis clavier" aria-label="Raccourcis clavier">?</button>
+    </header>
+
+    <main>
+      <!-- Écran 0 : projets -->
+      <section id="screen-projects" class="screen">
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="file-input" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac" hidden />
+          <strong>Importer une prod</strong>
+          <span>Glisse un fichier MP3 / WAV ici, ou clique pour le choisir.</span>
+          <span class="dim">Le fichier reste dans ton navigateur : rien n'est envoyé en ligne.</span>
+        </label>
+        <h2 class="section-title">Mes prods</h2>
+        <ul class="project-list" id="project-list"></ul>
+        <p class="empty dim" id="project-empty">Aucune prod pour l'instant.</p>
+      </section>
+
+      <!-- Écran 1 : prod -->
+      <section id="screen-prod" class="screen" hidden>
+        <div class="prod-head">
+          <input class="title-input" id="project-name" aria-label="Nom du projet" />
+          <span class="dim" id="project-file"></span>
+        </div>
+
+        <div class="panel wave-panel">
+          <canvas id="overview" class="overview" aria-label="Aperçu du morceau"></canvas>
+          <canvas id="detail" class="detail" aria-label="Forme d'onde avec grille rythmique"></canvas>
+          <div class="wave-hint dim">
+            Clic : aller à · Glisser : créer une boucle (aimantée aux mesures, <kbd>Maj</kbd> aux temps, <kbd>Alt</kbd> libre) · Molette : défiler, <kbd>Ctrl</kbd>+molette : zoom
+          </div>
+        </div>
+
+        <div class="panel transport">
+          <div class="transport-main">
+            <button class="btn round" id="back-btn" title="Reculer de 2 s (←)" aria-label="Reculer">⟲</button>
+            <button class="btn round big primary" id="play-btn" title="Lecture / pause (Espace)" aria-label="Lecture">▶</button>
+            <div class="time"><span id="time-now">0:00.0</span><span class="dim"> / <span id="time-total">0:00.0</span></span></div>
+          </div>
+
+          <div class="beat-indicator" id="beat-indicator" aria-live="off">
+            <div class="bar-num"><span class="dim">Mesure</span> <strong id="bar-num">–</strong></div>
+            <div class="beat-dots" id="beat-dots"></div>
+          </div>
+
+          <div class="transport-tools">
+            <div class="seg" role="group" aria-label="Vitesse">
+              <button class="seg-btn" data-rate="0.75">0,75x</button>
+              <button class="seg-btn" data-rate="1" aria-pressed="true">1x</button>
+            </div>
+            <div class="seg" role="group" aria-label="Boucle">
+              <button class="seg-btn" id="loop-toggle" title="Activer / couper la boucle (L)">Boucle</button>
+              <button class="seg-btn" data-loopbars="1" title="Boucler la mesure en cours">1</button>
+              <button class="seg-btn" data-loopbars="2">2</button>
+              <button class="seg-btn" data-loopbars="4">4</button>
+              <button class="seg-btn" data-loopbars="8">8</button>
+            </div>
+            <span class="dim small" id="loop-info">Pas de boucle</span>
+            <div class="seg" role="group" aria-label="Zoom">
+              <button class="seg-btn" id="zoom-out" title="Dézoomer">−</button>
+              <span class="seg-label" id="zoom-label">—</span>
+              <button class="seg-btn" id="zoom-in" title="Zoomer">+</button>
+            </div>
+            <label class="check"><input type="checkbox" id="follow" checked /> Suivre</label>
+          </div>
+        </div>
+
+        <div class="cols">
+          <!-- BPM & grille -->
+          <div class="panel">
+            <h3>Tempo &amp; grille</h3>
+            <div class="bpm-row">
+              <div class="bpm-big"><span id="bpm-value">—</span><small>BPM</small></div>
+              <div class="bpm-meta">
+                <span class="badge" id="bpm-confidence" hidden></span>
+                <span class="dim small" id="bpm-source"></span>
+              </div>
+            </div>
+            <div class="progress" id="analysis-progress" hidden><div></div></div>
+            <p class="small dim" id="analysis-message"></p>
+
+            <div class="field-group">
+              <span class="label">Ça sonne trop lent / trop rapide ?</span>
+              <div class="row">
+                <button class="btn" id="bpm-half" title="Diviser par 2">÷2</button>
+                <button class="btn" id="bpm-double" title="Multiplier par 2">×2</button>
+                <span class="chips" id="bpm-alternatives"></span>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <span class="label">Corriger à la main</span>
+              <div class="row">
+                <input type="number" id="bpm-input" min="40" max="240" step="0.01" placeholder="BPM" aria-label="BPM" />
+                <button class="btn" id="bpm-apply">Appliquer</button>
+                <button class="btn tap" id="tap-btn" title="Tape en rythme (T)">Tap <small id="tap-info"></small></button>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <span class="label">Le « 1 » (premier temps de la mesure)</span>
+              <div class="row">
+                <button class="btn" id="db-here" title="Le 1 tombe là où est la tête de lecture">Le 1 est ici</button>
+                <button class="btn" id="db-prev-beat" title="Décaler d'un temps vers la gauche">← 1 temps</button>
+                <button class="btn" id="db-next-beat" title="Décaler d'un temps vers la droite">1 temps →</button>
+              </div>
+              <div class="row">
+                <button class="btn small" id="db-nudge-minus">−10 ms</button>
+                <button class="btn small" id="db-nudge-plus">+10 ms</button>
+                <span class="dim small" id="db-info"></span>
+              </div>
+            </div>
+
+            <div class="row">
+              <button class="btn" id="reanalyze">Relancer la détection</button>
+              <button class="btn" id="analyze-loop" disabled title="Utile si l'intro n'a pas de batterie">Détecter sur la boucle</button>
+            </div>
+          </div>
+
+          <!-- Écoute -->
+          <div class="panel">
+            <h3>Écoute</h3>
+            <div class="field-group">
+              <label class="check"><input type="checkbox" id="metro-on" /> Métronome <kbd>K</kbd></label>
+              <label class="slider">Volume clic <input type="range" id="metro-volume" min="0" max="1" step="0.01" value="0.6" /></label>
+              <label class="slider">Calage clic <input type="range" id="metro-offset" min="-80" max="80" step="1" value="0" /> <span class="small dim" id="metro-offset-label">0 ms</span></label>
+            </div>
+            <label class="slider">Volume prod <input type="range" id="beat-volume" min="0" max="1" step="0.01" value="1" /></label>
+            <p class="small dim">Écoute au casque filaire : le Bluetooth ajoute un décalage.</p>
+
+            <h3>Infos</h3>
+            <div class="field-group">
+              <label class="label" for="key-select">Tonalité <span class="dim">(si tu la connais)</span></label>
+              <select id="key-select"></select>
+            </div>
+            <div class="field-group">
+              <label class="label" for="yt-input">Lien de la prod (YouTube, BeatStars…)</label>
+              <input type="url" id="yt-input" placeholder="https://www.youtube.com/watch?v=…" />
+              <a id="yt-link" target="_blank" rel="noopener noreferrer" hidden>Ouvrir la page de la prod ↗</a>
+              <p class="small dim">Simple référence pour créditer le beatmaker et retrouver sa licence. L'app ne lit pas et ne télécharge pas YouTube.</p>
+            </div>
+          </div>
+
+          <!-- Repères -->
+          <div class="panel">
+            <h3>Repères</h3>
+            <button class="btn" id="marker-add">+ Repère à la tête de lecture <kbd>M</kbd></button>
+            <ul class="marker-list" id="marker-list"></ul>
+            <p class="small dim" id="marker-empty">Marque les moments qui t'inspirent : entrée de la batterie, changement de piano…</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="help-dialog">
+      <h3>Raccourcis clavier</h3>
+      <dl class="shortcuts">
+        <dt><kbd>Espace</kbd></dt><dd>Lecture / pause</dd>
+        <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Reculer / avancer de 2 s (<kbd>Maj</kbd> : d'une mesure)</dd>
+        <dt><kbd>L</kbd></dt><dd>Activer / couper la boucle</dd>
+        <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Début / fin de boucle à la tête de lecture</dd>
+        <dt><kbd>S</kbd></dt><dd>Vitesse 0,75x / 1x</dd>
+        <dt><kbd>K</kbd></dt><dd>Métronome</dd>
+        <dt><kbd>T</kbd></dt><dd>Tap tempo</dd>
+        <dt><kbd>M</kbd></dt><dd>Ajouter un repère</dd>
+        <dt><kbd>Home</kbd></dt><dd>Retour au début</dd>
+      </dl>
+      <form method="dialog"><button class="btn">Fermer</button></form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
