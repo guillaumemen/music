@@ -1,7 +1,7 @@
 // Stockage local (IndexedDB) : métadonnées des projets + fichiers audio.
 // Rien ne quitte le navigateur.
 const DB_NAME = 'flowlab';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // 2 : ajout des prises (audio du yaourt)
 
 let dbPromise = null;
 
@@ -13,6 +13,7 @@ function open() {
         const db = req.result;
         if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio');
+        if (!db.objectStoreNames.contains('takes')) db.createObjectStore('takes');
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -66,9 +67,28 @@ export function createProject(project, blob) {
   });
 }
 
-export function deleteProject(id) {
-  return run(['projects', 'audio'], 'readwrite', (tx) => {
+// `takeIds` : prises du projet, effacées avec lui.
+export function deleteProject(id, takeIds = []) {
+  return run(['projects', 'audio', 'takes'], 'readwrite', (tx) => {
     tx.objectStore('projects').delete(id);
     tx.objectStore('audio').delete(id);
+    for (const t of takeIds) tx.objectStore('takes').delete(t);
+  });
+}
+
+// Audio d'une prise : { samples: Float32Array, sampleRate }.
+export function saveTakeAudio(id, data) {
+  return run(['takes'], 'readwrite', (tx) => {
+    tx.objectStore('takes').put(data, id);
+  });
+}
+
+export function getTakeAudio(id) {
+  return run(['takes'], 'readonly', (tx) => request(tx.objectStore('takes').get(id)));
+}
+
+export function deleteTakeAudio(id) {
+  return run(['takes'], 'readwrite', (tx) => {
+    tx.objectStore('takes').delete(id);
   });
 }

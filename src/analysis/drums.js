@@ -9,6 +9,8 @@ import { normalizeEnvelope, peakNear } from './tempo.js';
 
 export const STEPS_PER_BEAT = 4;
 export const HIT_THRESHOLD = 0.5;
+// À changer quand le format du résultat change : les analyses enregistrées sont alors refaites.
+export const DRUMS_VERSION = 2;
 
 function percentile(values, q) {
   if (!values.length) return 0;
@@ -76,25 +78,21 @@ export function analyzeDrums(features, grid, { duration } = {}) {
     b.bright = Math.round(b.bright * 1000) / 1000;
   }
 
-  return { ok: true, steps, grid: { bpm: grid.bpm, downbeat: grid.downbeat, beatsPerBar }, bars, pattern: drumPattern(bars, steps) };
+  return { ok: true, version: DRUMS_VERSION, steps, grid: { bpm: grid.bpm, downbeat: grid.downbeat, beatsPerBar }, bars, pattern: drumPattern(bars, steps) };
 }
 
 export const hitCount = (values) => values.reduce((n, v) => n + (v >= HIT_THRESHOLD ? 1 : 0), 0);
 
-// Motif type : médiane case par case, sur les mesures où il y a de la batterie.
+// Motif type : pour chaque case, la part des mesures (avec batterie) où elle est jouée.
+// 1 = à chaque mesure, 0,5 = une mesure sur deux. En trap, le kick (souvent une 808) change
+// d'une mesure à l'autre : aucune case n'atteint 0,5 et `kickVaries` le signale.
 export function drumPattern(bars, steps = 16) {
   const withDrums = bars.filter((b) => b.bar >= 1 && hitCount(b.kick) + hitCount(b.snare) >= 2);
-  const median = (key, s) => {
-    const values = withDrums.map((b) => b[key][s]).sort((x, y) => x - y);
-    if (!values.length) return 0;
-    const m = values.length >> 1;
-    return round2(values.length % 2 ? values[m] : (values[m - 1] + values[m]) / 2);
-  };
-  return {
-    kick: Array.from({ length: steps }, (_, s) => median('kick', s)),
-    snare: Array.from({ length: steps }, (_, s) => median('snare', s)),
-    bars: withDrums.length,
-  };
+  const share = (key, s) => (withDrums.length ? round2(withDrums.filter((b) => b[key][s] >= HIT_THRESHOLD).length / withDrums.length) : 0);
+  const kick = Array.from({ length: steps }, (_, s) => share('kick', s));
+  const snare = Array.from({ length: steps }, (_, s) => share('snare', s));
+  const kicksPerBar = withDrums.length ? withDrums.reduce((n, b) => n + hitCount(b.kick), 0) / withDrums.length : 0;
+  return { kick, snare, bars: withDrums.length, kickVaries: kicksPerBar >= 1 && hitCount(kick) === 0 };
 }
 
 // Signature d'une grille : sert à savoir si une analyse de batterie est encore valable.

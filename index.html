@@ -17,8 +17,8 @@
       <nav class="tabs" aria-label="Écrans">
         <button class="tab" data-screen="projects" aria-current="page">Projets</button>
         <button class="tab" data-screen="prod" disabled>Prod</button>
-        <button class="tab" disabled title="Étapes 4 à 6 du plan">Yaourt <small>bientôt</small></button>
-        <button class="tab" disabled title="Étape 8 du plan">Texte <small>bientôt</small></button>
+        <button class="tab" data-screen="yaourt" disabled>Yaourt</button>
+        <button class="tab" data-screen="texte" disabled>Texte</button>
       </nav>
       <button class="icon-btn" id="help-btn" title="Raccourcis clavier" aria-label="Raccourcis clavier">?</button>
     </header>
@@ -202,7 +202,115 @@
           </div>
         </div>
       </section>
+      <!-- Écran 2 : yaourt -->
+      <section id="screen-yaourt" class="screen" hidden>
+        <div class="prod-head">
+          <h2 class="screen-title">Yaourt</h2>
+          <span class="dim" id="y-project"></span>
+        </div>
+
+        <div class="panel y-stage">
+          <div class="y-toolbar">
+            <button class="btn round big rec" id="y-rec" title="Enregistrer / arrêter (R)" aria-label="Enregistrer une prise">●</button>
+            <button class="btn round" id="y-play" title="Écouter (Espace)" aria-label="Lecture">▶</button>
+            <div class="y-status">
+              <strong id="y-state">Prêt</strong>
+              <span class="small dim" id="y-region"></span>
+            </div>
+            <div class="beat-indicator">
+              <div class="bar-num"><span class="dim">Mesure</span> <strong id="y-bar">–</strong></div>
+              <div class="beat-dots" id="y-dots"></div>
+            </div>
+          </div>
+          <div class="row y-options">
+            <label class="label-inline">Passage
+              <select id="y-passage" aria-label="Passage à enregistrer"></select>
+            </label>
+            <div class="seg" role="group" aria-label="Prise entendue pendant la lecture">
+              <button class="seg-btn" data-listen="a" title="Entendre la prise A (touche A)">Écouter A</button>
+              <button class="seg-btn" data-listen="b" title="Entendre la prise B (touche B)">Écouter B</button>
+              <button class="seg-btn" data-listen="none" title="Prod seule">Prod seule</button>
+            </div>
+            <label class="check"><input type="checkbox" id="y-countin" checked /> Décompte d'une mesure</label>
+            <label class="check"><input type="checkbox" id="y-ghost-audible" /> Entendre le fantôme</label>
+          </div>
+          <div class="flow-wrap">
+            <canvas id="flow-canvas" class="flow-canvas" aria-label="Guide visuel : tes syllabes sur la grille, mesure par mesure"></canvas>
+            <div class="countdown" id="y-countdown" hidden></div>
+          </div>
+          <div class="y-legend small dim">
+            <span><i class="lg on"></i>dans le temps</span>
+            <span><i class="lg early"></i>en avance</span>
+            <span><i class="lg late"></i>en retard</span>
+            <span><i class="lg big"></i>accent</span>
+            <span><i class="lg ghost"></i>prise fantôme</span>
+            <span><i class="lg kick"></i>kick</span>
+            <span><i class="lg snare"></i>caisse claire</span>
+          </div>
+        </div>
+
+        <div class="cols-2">
+          <div class="panel">
+            <h3>Carte de flow <span class="h3-sub">prise A</span></h3>
+            <div id="flow-summary"></div>
+            <h3>Comparaison A / B</h3>
+            <div id="ab-compare"></div>
+          </div>
+          <div class="panel">
+            <h3>Prises</h3>
+            <ul class="take-list" id="take-list"></ul>
+            <p class="small dim" id="take-empty">Aucune prise. Choisis un passage, mets ton casque, appuie sur ● (ou <kbd>R</kbd>) et yaourte en « da / ta » : pas besoin de mots.</p>
+            <h3>Micro &amp; latence</h3>
+            <p class="small dim" id="y-mic">Micro : pas encore ouvert (il sera demandé à la première prise).</p>
+            <label class="slider">Latence <input type="range" id="y-latency" min="0" max="400" step="1" /> <span class="small dim" id="y-latency-label"></span></label>
+            <button class="btn" id="y-calibrate">Calibrer la latence</button>
+            <p class="small dim">Casque filaire obligatoire : sinon le micro capte la prod, et le Bluetooth ajoute 150 à 300 ms. À calibrer une fois par appareil.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Écran 3 : texte -->
+      <section id="screen-texte" class="screen" hidden>
+        <div class="prod-head">
+          <h2 class="screen-title">Texte</h2>
+          <span class="dim">Une ligne par mesure. L'app compte et place les syllabes : c'est toi qui écris.</span>
+        </div>
+        <div class="panel row t-setup">
+          <label class="label-inline">Comparer à
+            <select id="t-take" aria-label="Prise de yaourt de référence"></select>
+          </label>
+          <label class="label-inline" id="t-target-wrap">Cible
+            <input type="number" id="t-target" min="1" max="40" aria-label="Syllabes visées par mesure" /> syll. / mesure
+          </label>
+          <label class="label-inline">1re ligne = mesure
+            <input type="number" id="t-start" min="1" aria-label="Mesure de la première ligne" />
+          </label>
+          <select id="t-section" aria-label="Caler le texte sur une section"></select>
+        </div>
+        <div class="cols-text">
+          <div class="panel">
+            <textarea id="t-text" spellcheck="true" placeholder="Colle ou écris ton texte ici, une ligne par mesure." aria-label="Texte"></textarea>
+          </div>
+          <div class="panel">
+            <p class="small" id="t-summary"></p>
+            <ol class="t-lines" id="t-lines"></ol>
+            <p class="small dim">Plage min–max : les syllabes en italique (« e » muets) peuvent s'avaler. Une syllabe peut aussi compter double en diérèse (« pas-si-on »).</p>
+          </div>
+        </div>
+      </section>
     </main>
+
+    <dialog id="calib-dialog">
+      <h3>Calibrer la latence</h3>
+      <p class="small">Casque sur les oreilles. Tu vas entendre 12 clics : écoute les 4 premiers, puis dis « ta » bien net sur chacun des 8 suivants. L'app mesure le décalage entre le clic et ta voix, et s'en sert pour caler tes prises sur la prod.</p>
+      <p><strong id="calib-status"></strong></p>
+      <p class="small" id="calib-result"></p>
+      <div class="row">
+        <button class="btn primary" id="calib-start">Lancer la mesure</button>
+        <button class="btn" id="calib-apply" hidden>Appliquer</button>
+        <form method="dialog"><button class="btn">Fermer</button></form>
+      </div>
+    </dialog>
 
     <dialog id="help-dialog">
       <h3>Raccourcis clavier</h3>
@@ -216,6 +324,8 @@
         <dt><kbd>T</kbd></dt><dd>Tap tempo</dd>
         <dt><kbd>M</kbd></dt><dd>Ajouter un repère</dd>
         <dt><kbd>N</kbd></dt><dd>Nouvelle section à la mesure en cours</dd>
+        <dt><kbd>R</kbd></dt><dd>Yaourt : enregistrer / arrêter une prise (<kbd>Échap</kbd> : annuler)</dd>
+        <dt><kbd>A</kbd> <kbd>B</kbd></dt><dd>Yaourt : écouter la prise A / B</dd>
         <dt><kbd>Home</kbd></dt><dd>Retour au début</dd>
       </dl>
       <form method="dialog"><button class="btn">Fermer</button></form>

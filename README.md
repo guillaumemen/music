@@ -1,12 +1,14 @@
 # Flowlab
 
 Atelier de flow pour le rap, dans le navigateur. Tu importes une prod, l'app trouve son tempo et
-dessine la grille des mesures, puis (prochaines étapes) tu yaourtes dessus et tu vois ton flow sur
-la grille.
+dessine la grille des mesures ; tu yaourtes dessus au casque et tu vois ton flow sur la grille ;
+puis tu poses ton texte ligne par ligne et l'app compte les syllabes par rapport à ton yaourt.
 
 Flowlab **n'écrit pas à ta place** : il t'aide seulement à trouver et à garder le rythme.
 
-## Ce qui marche aujourd'hui (étapes 0 à 3)
+## Ce qui marche aujourd'hui (étapes 0 à 6 et 8)
+
+### Écran Prod
 
 - **Projets** : import d'un MP3 / WAV (glisser-déposer ou sélection). Les fichiers restent dans le
   navigateur (IndexedDB). Rien n'est envoyé en ligne.
@@ -35,10 +37,40 @@ Flowlab **n'écrit pas à ta place** : il t'aide seulement à trouver et à gard
 - **Infos** : tonalité saisie à la main, lien de la prod (simple référence, YouTube n'est ni lu ni
   téléchargé).
 
+### Écran Yaourt
+
+- **Enregistrement au casque** : micro sans traitement (ni annulation d'écho, ni réduction de
+  bruit, ni gain automatique), sur un **passage** au choix : une section, la boucle, ou librement
+  depuis la mesure en cours. Une passe par prise, avec un décompte d'une mesure.
+- **Calibration de la latence** (une fois par appareil) : 12 clics, tu dis « ta » sur les 8
+  derniers ; l'app mesure le décalage casque + micro + réflexe et cale tes prises dessus.
+- **Guide visuel en direct** : les mesures du passage en lignes de 16 cases, curseur, pulsation des
+  temps, décompte en grand, et chaque syllabe qui apparaît pendant que tu yaourtes, colorée
+  **dans le temps / en avance / en retard** (gros point = accent). Kick et caisse claire en fond.
+- **Carte de flow** de la prise A : syllabes par mesure, part dans le temps, tendance avance /
+  retard, accents, silences (respirations d'un temps ou plus), accélérations / ralentissements, et
+  **motifs** rythmiques qui reviennent (même lettre = même placement).
+- **Prises** : autant que tu veux, renommables. **Prise fantôme** : une ancienne prise affichée en
+  cercles (et audible si tu veux) pendant que tu en enregistres une nouvelle. **Comparaison A / B** :
+  deux prises côte à côte (densité, placement, accents), et « Écouter A / B » pour passer de l'une à
+  l'autre sans couper la prod.
+
+### Écran Texte
+
+- Une ligne de texte = une mesure, à partir d'une mesure ou d'une section au choix.
+- **Comptage des syllabes en français**, en plage min–max : les « e » muets (en italique) peuvent
+  s'avaler (« sam(e)di », « (je) suis »), les élisions écrites comptent comme écrites (« j'suis »,
+  « p'tit »), la diérèse peut ajouter une syllabe (« pas-si-on »).
+- Comparaison avec le **nombre de syllabes de ton yaourt** sur la mesure (ou une cible fixe) :
+  ça rentre / presque / trop long / trop court, avec le pourquoi en une phrase.
+- **Accent décalé** : la dernière syllabe forte de la ligne tombe-t-elle sur un accent du yaourt ?
+- Les syllabes du texte sont posées sur celles du yaourt, case par case.
+- **Aucun mot n'est proposé** : pas de rimes, pas de suggestions, pas de réécriture.
+
 ## Lancer l'app
 
-Aucune dépendance à installer, il suffit d'un serveur statique (le micro, aux étapes suivantes,
-exige `localhost` ou HTTPS) :
+Aucune dépendance à installer, il suffit d'un serveur statique (le micro exige `localhost` ou
+HTTPS) :
 
 ```bash
 npm start            # = npx serve -l 5173 .
@@ -76,6 +108,8 @@ Les prods importées restent dans le navigateur (IndexedDB), pas dans le contene
 | `T` | Tap tempo |
 | `M` | Repère |
 | `N` | Section à la mesure en cours |
+| `R` | Yaourt : enregistrer / arrêter une prise (`Échap` : annuler) |
+| `A` `B` | Yaourt : écouter la prise A / B |
 
 ## Tests
 
@@ -90,6 +124,10 @@ tempos (65 à 160 BPM, BPM non entier, intro sans batterie, swing). Ils vérifie
 - la position du « 1 », à 10 ms près ;
 - le kick et la caisse claire sur les bonnes cases (charley non confondu avec la caisse claire) ;
 - les sections proposées (intro sans batterie, break, frontières à la mesure près) ;
+- les syllabes d'un yaourt synthétique (« da-da »), à 10 ms près, ses accents, en direct comme après
+  la prise ;
+- la carte de flow (avance / retard, motifs, accélérations, silences) ;
+- le comptage des syllabes en français sur une trentaine de mots et de lignes ;
 - la logique de grille, des sections et le tap tempo.
 
 ## Organisation du code
@@ -99,10 +137,13 @@ index.html            page unique
 src/
   main.js             contrôleur de l'interface (écrans, raccourcis, boucle d'affichage)
   styles.css          thème sombre
-  core/               logique pure : grille rythmique, sections, tap tempo, modèle de projet, formatage
-  audio/              lecteur (Web Audio + <audio>), métronome programmé à l'avance
+  core/               logique pure : grille rythmique, sections, carte de flow, syllabes du français,
+                      tap tempo, modèle de projet, formatage
+  audio/              lecteur (Web Audio + <audio>), métronome programmé à l'avance, micro
+                      (AudioWorklet horodaté) et lecture des prises
   analysis/           tempo (FFT, flux spectral, autocorrélation, grille), batterie en 16 cases,
-                      proposition de sections + Web Worker
+                      proposition de sections, syllabes de la voix + Web Worker
+  screens/            écrans Yaourt et Texte
   ui/                 forme d'onde et grille sur <canvas>
   store/              IndexedDB
 tests/                tests Node (node --test)
@@ -129,5 +170,18 @@ calculé en magnitude linéaire (sans log) : sinon un charley discret pèserait 
 caisse claire. Une part de chaque bande est retirée de l'autre (le grave d'une caisse claire, le
 claquement d'un kick). Les forces sont ramenées entre 0 et 1 par rapport à un coup typique du
 morceau : au-dessus de 0,5, c'est un coup. Tout est recalculé quand la grille change (BPM, « 1 »).
+
+## Comment le yaourt est calé sur la prod
+
+Le micro est capté par un AudioWorklet, qui donne l'instant exact de chaque échantillon sur
+l'horloge Web Audio (la même que le métronome). Une syllabe captée à l'instant C correspond à ce que
+tu entendais dans la prod à `C − latence`. La latence (sortie casque + entrée micro + ton propre
+réflexe) se mesure avec la calibration.
+
+Les syllabes sont repérées sur l'énergie de la voix (fenêtre de 20 ms toutes les 5 ms) : une
+syllabe commence quand l'énergie remonte nettement après un creux (la consonne). Après la prise,
+chaque syllabe reçoit sa hauteur (autocorrélation) ; un accent est une syllabe plus forte que la
+moyenne, ou plus haute et plus longue. Chaque syllabe est ensuite rattachée à la double croche la
+plus proche : à moins de 35 ms, elle est « dans le temps ».
 
 Les limites connues sont dans [docs/PLAN.md](docs/PLAN.md#limites-techniques).

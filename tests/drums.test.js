@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeFeatures } from '../src/analysis/tempo.js';
-import { analyzeDrums, HIT_THRESHOLD, gridSignature } from '../src/analysis/drums.js';
+import { analyzeDrums, drumPattern, HIT_THRESHOLD, gridSignature } from '../src/analysis/drums.js';
 import { proposeSections } from '../src/analysis/sections.js';
 import { synthBeat } from './synth.js';
 
@@ -42,6 +42,17 @@ test('mesures sans batterie : aucune case allumée', () => {
     assert.deepEqual(hits(bar.snare), [], `caisse claire mesure ${n}`);
   }
   assert.deepEqual(hits(r.bars.find((b) => b.bar === 8).kick), [0, 10]);
+});
+
+test('motif type : kick qui change à chaque mesure (trap) signalé comme variable', () => {
+  const steps = (list) => Array.from({ length: 16 }, (_, i) => (list.includes(i) ? 0.9 : 0));
+  const kicks = [[0, 3, 10], [0, 7], [2, 11, 14], [5, 6, 15], [1, 9], [3, 12]];
+  const bars = kicks.map((k, i) => ({ bar: i + 1, kick: steps(k), snare: steps([4, 12]) }));
+  const p = drumPattern(bars);
+  assert.equal(p.kickVaries, true);
+  assert.deepEqual(hits(p.snare), [4, 12]);
+  assert.equal(p.snare[4], 1);
+  assert.ok(p.kick[0] > 0 && p.kick[0] < 0.5);
 });
 
 test('signature de grille', () => {

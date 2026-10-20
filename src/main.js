@@ -7,9 +7,11 @@ import { Player, decodeToMono } from './audio/player.js';
 import { Metronome } from './audio/metronome.js';
 import { AnalysisClient } from './analysis/client.js';
 import { WaveformView, buildPeaks } from './ui/waveform.js';
-import { HIT_THRESHOLD, gridSignature } from './analysis/drums.js';
+import { HIT_THRESHOLD, DRUMS_VERSION, gridSignature } from './analysis/drums.js';
 import { proposeSections } from './analysis/sections.js';
 import * as S from './core/sections.js';
+import { initYaourt } from './screens/yaourt.js';
+import { initTexte } from './screens/texte.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -62,7 +64,13 @@ function showScreen(name) {
     player.pause();
     renderProjects();
   }
+  if (name === 'yaourt') yaourt.show();
+  else yaourt.hide();
+  if (name === 'texte') texte.show();
 }
+
+const SCREEN_TABS = ['prod', 'yaourt', 'texte'];
+const setScreenTabs = (enabled) => SCREEN_TABS.forEach((n) => ($(`.tab[data-screen="${n}"]`).disabled = !enabled));
 
 /* ------------------------------------------------------------------ */
 /* Écran Projets                                                       */
@@ -92,7 +100,7 @@ async function renderProjects() {
     del.textContent = 'Supprimer';
     del.onclick = async () => {
       if (!confirm(`Supprimer « ${p.name} » ? Le fichier audio stocké dans le navigateur sera effacé.`)) return;
-      await db.deleteProject(p.id);
+      await db.deleteProject(p.id, (p.takes || []).map((t) => t.id));
       if (state.project?.id === p.id) closeProject();
       renderProjects();
     };
@@ -121,9 +129,10 @@ async function importFile(file) {
 function closeProject() {
   player.pause();
   drumsJob++;
+  yaourt.reset();
   state.project = null;
   state.audio = null;
-  $('.tab[data-screen="prod"]').disabled = true;
+  setScreenTabs(false);
 }
 
 /* ------------------------------------------------------------------ */
@@ -138,9 +147,10 @@ async function openProject(id) {
     return;
   }
   player.ensureContext();
+  yaourt.reset();
   state.project = { ...newProject({ name: '' }), ...project };
   state.audio = null;
-  $('.tab[data-screen="prod"]').disabled = false;
+  setScreenTabs(true);
   showScreen('prod');
   renderProjectInfo();
   setAnalysisMessage('Chargement de la prod…');
@@ -254,6 +264,7 @@ function applyGrid(g, source, { save = true } = {}) {
   updateZoomLabel();
   renderSections();
   scheduleDrums();
+  yaourt.gridChanged();
   if (save) saveSoon();
 }
 
@@ -308,7 +319,7 @@ function renderBeatDots() {
 function currentDrums() {
   const d = state.project?.drums;
   const g = grid();
-  return d?.ok && g && gridSignature(d.grid) === gridSignature(g) ? d : null;
+  return d?.ok && d.version === DRUMS_VERSION && g && gridSignature(d.grid) === gridSignature(g) ? d : null;
 }
 
 let drumsTimer = null;
@@ -404,7 +415,8 @@ function describePattern(pattern) {
   const k = hits(pattern.kick);
   const sn = hits(pattern.snare);
   const list = (a) => (a.length ? a.map(stepName).join(', ') : 'rien de net');
-  let text = `Motif type : kick sur ${list(k)} · caisse claire sur ${list(sn)}.`;
+  const kickText = pattern.kickVaries ? "un placement qui change d'une mesure à l'autre (808 / trap)" : list(k);
+  let text = `Motif type (cases jouées au moins une mesure sur deux) : kick sur ${kickText} · caisse claire sur ${list(sn)}.`;
   const on = (i) => sn.includes(i);
   if (on(4) && on(12)) text += ' Caisse claire sur le 2 et le 4 : le schéma classique du rap.';
   else if (on(8) && !on(4) && !on(12)) text += ' Caisse claire sur le 3 seulement : prod en half-time (fréquent en trap).';
@@ -444,7 +456,7 @@ function updateDrumGrid(t) {
   if (barChanged) {
     const caption = $('#drum-caption');
     if (!g) caption.textContent = '–';
-    else if (state.drumView === 'pattern') caption.textContent = d ? `Médiane de ${d.pattern.bars} mesures avec batterie` : '';
+    else if (state.drumView === 'pattern') caption.textContent = d ? `Sur ${d.pattern.bars} mesures avec batterie : plus la case est vive, plus elle revient souvent` : '';
     else caption.textContent = bar >= 1 ? `Mesure ${bar}` : 'Avant la mesure 1';
     renderCurrentSection(bar);
   }
@@ -991,6 +1003,26 @@ function saveSettings(patch) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...loadSettings(), ...patch }));
   } catch {}
 }
+
+// Écrans Yaourt et Texte : modules à part, qui reçoivent ce dont ils ont besoin.
+const app = {
+  state,
+  player,
+  metronome,
+  grid,
+  saveSoon,
+  toast,
+  applyLoop,
+  setRate,
+  currentDrums,
+  lastBar,
+  loadSettings,
+  saveSettings,
+  sections: () => (grid() && state.project ? S.sectionRanges(state.project.sections, lastBar()) : []),
+};
+const yaourt = initYaourt(app);
+app.yaourt = yaourt;
+const texte = initTexte(app);
 
 bind();
 renderBeatDots();

@@ -1,9 +1,10 @@
 // Proposition automatique de sections (fonction pure). L'utilisateur valide ou corrige ensuite.
 //
 // On décrit chaque mesure par son niveau, sa brillance et le nombre de coups de kick et de caisse
-// claire. On compare des blocs de 4 mesures consécutifs : un gros écart = début d'une nouvelle
-// partie. La frontière est ensuite affinée à ±2 mesures. Les parties qui se ressemblent reçoivent
-// la même lettre (Partie A, B…) ; une partie sans batterie au début / à la fin = Intro / Outro.
+// claire. Avant chaque mesure, on compare les 4 mesures d'avant aux 4 d'après : un gros écart =
+// début d'une nouvelle partie (on garde les écarts les plus nets, à 4 mesures d'intervalle au
+// moins). Les parties qui se ressemblent reçoivent la même lettre (Partie A, B…) ; une partie sans
+// batterie au début / au milieu / à la fin = Intro / Break / Outro.
 
 import { hitCount } from './drums.js';
 
@@ -11,6 +12,8 @@ import { hitCount } from './drums.js';
 const SCALE = { level: 4, bright: 0.05, kick: 1.5, snare: 1.5 };
 const BOUNDARY = 1.0;
 const SAME_PART = 0.75;
+const WINDOW = 4;
+const MIN_PART = 4;
 
 function describe(bar) {
   return { level: bar.level, bright: bar.bright, kick: hitCount(bar.kick), snare: hitCount(bar.snare) };
@@ -31,38 +34,45 @@ function distance(a, b) {
 const hasDrums = (d) => d.kick + d.snare >= 1;
 
 // `drums` : résultat de analyzeDrums. Retourne [{ startBar, label }].
-export function proposeSections(drums, { blockBars = 4 } = {}) {
+export function proposeSections(drums) {
   const bars = drums.bars.filter((b) => b.bar >= 1);
-  // Dernière mesure souvent incomplète (fin du fichier) : on ne la laisse pas créer une partie.
   const desc = bars.map(describe);
-  if (desc.length < blockBars * 2) return [{ startBar: 1, label: 'Partie A' }];
+  const n = desc.length;
+  if (n < MIN_PART * 2) return [{ startBar: 1, label: 'Partie A' }];
 
-  const blocks = [];
-  for (let i = 0; i + blockBars <= desc.length; i += blockBars) blocks.push(mean(desc.slice(i, i + blockBars)));
-
-  // Frontières entre blocs, puis affinage à la mesure près.
-  const starts = [0];
-  for (let k = 1; k < blocks.length; k++) {
-    if (distance(blocks[k - 1], blocks[k]) < BOUNDARY) continue;
-    const center = k * blockBars;
-    let best = center, bestD = -1;
-    for (let i = center - 2; i <= center + 2; i++) {
-      if (i <= starts[starts.length - 1] + 1 || i + 2 > desc.length) continue;
-      const d = distance(mean(desc.slice(i - 2, i)), mean(desc.slice(i, i + 2)));
-      if (d > bestD + 0.05 || (Math.abs(d - bestD) <= 0.05 && Math.abs(i - center) < Math.abs(best - center))) {
-        best = i;
-        bestD = d;
-      }
-    }
-    starts.push(best);
+  // Nouveauté avant chaque mesure i : 4 mesures avant contre 4 après (moins près des bords).
+  const novelty = new Array(n).fill(0);
+  for (let i = 2; i <= n - 2; i++) {
+    const w = Math.min(WINDOW, i, n - i);
+    novelty[i] = distance(mean(desc.slice(i - w, i)), mean(desc.slice(i, i + w)));
   }
+  // Les plus nettes d'abord, à MIN_PART mesures les unes des autres (et des bords).
+  const candidates = novelty
+    .map((v, i) => ({ i, v }))
+    .filter((c) => c.v >= BOUNDARY && c.i >= 2)
+    .sort((a, b) => b.v - a.v);
+  // Une intro courte (2 ou 3 mesures) reste permise : seul l'écart avec le début n'est pas imposé.
+  const starts = [0];
+  for (const c of candidates) {
+    if (starts.some((s) => s !== 0 && Math.abs(s - c.i) < MIN_PART)) continue;
+    starts.push(c.i);
+  }
+  starts.sort((a, b) => a - b);
+  const parts = starts.map((s, k) => ({ start: s, d: mean(desc.slice(s, starts[k + 1] ?? n)) }));
 
-  // Description moyenne de chaque partie, puis regroupement par ressemblance.
-  const parts = starts.map((s, i) => ({ start: s, d: mean(desc.slice(s, starts[i + 1] ?? desc.length)) }));
+  // Deux parties sans batterie qui se suivent n'en font qu'une (fin qui s'éteint, par exemple).
+  const merged = [];
+  for (const p of parts) {
+    const prev = merged[merged.length - 1];
+    if (prev && !hasDrums(prev.d) && !hasDrums(p.d)) continue;
+    merged.push(p);
+  }
+  for (let k = 0; k < merged.length; k++) merged[k].d = mean(desc.slice(merged[k].start, merged[k + 1]?.start ?? n));
+
   const groups = [];
-  return parts.map((p, i) => {
+  return merged.map((p, i) => {
     let label;
-    if (parts.length > 1 && !hasDrums(p.d)) label = i === 0 ? 'Intro' : i === parts.length - 1 ? 'Outro' : 'Break';
+    if (merged.length > 1 && !hasDrums(p.d)) label = i === 0 ? 'Intro' : i === merged.length - 1 ? 'Outro' : 'Break';
     else {
       let g = groups.find((x) => distance(x.d, p.d) < SAME_PART);
       if (!g) groups.push((g = { d: p.d, letter: String.fromCharCode(65 + groups.length) }));

@@ -19,6 +19,7 @@ export function newProject(file) {
     loop: { a: 0, b: 0, enabled: false },
     sections: [], // { id, startBar, label } : voir core/sections.js
     drums: null, // kick / caisse claire en 16 cases pour une grille donnée (analysis/drums.js)
-    takes: [], // étape 4
+    takes: [], // { id, name, createdAt, start, duration, region, latencyMs, sylls } (audio : store 'takes')
+    text: { body: '', startBar: 1, takeId: '', target: 8 }, // écran Texte
   };
 }

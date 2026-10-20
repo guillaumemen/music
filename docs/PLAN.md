@@ -23,7 +23,7 @@ de rimes, pas de réécriture). L'app compte et place ; c'est toi qui écris.
 |---|---|
 | Projets | Liste des prods, import |
 | Prod | Lecteur, BPM auto + corrections, grille, sections, métronome, repères |
-| Yaourt | Enregistrement avec guide en direct, carte de flow, prises, comparaison |
+| Yaourt | Enregistrement avec guide en direct, carte de flow, prises, prise fantôme, comparaison A / B |
 | Texte | Texte collé ligne par ligne sur la grille : comptage des syllabes, alertes trop long / trop court |
 
 ## Étapes
@@ -34,11 +34,11 @@ de rimes, pas de réécriture). L'app compte et place ; c'est toi qui écris.
 | 1 | Import, forme d'onde, lecture, boucle, 0,75x / 1x, repères | ✅ |
 | 2 | BPM auto + confiance + ÷2 / ×2 + tap + métronome + grille de mesures | ✅ |
 | 3 | Kick et caisse claire affichés sur une grille 16 cases par mesure + sections (intro, couplet…) calées sur les mesures | ✅ |
-| 4 | Enregistrement au casque (`getUserMedia` sans traitement de la voix), calibration de la latence, plusieurs prises | à faire |
-| 5 | Guide visuel en direct (curseur, pulsation, décompte, syllabes colorées en avance / dans le temps / en retard) + carte de flow (syllabes, accents, silences, syllabes par mesure, accélérations, motifs répétés) | à faire |
-| 6 | Prise fantôme + comparaison A/B des prises | à faire |
+| 4 | Enregistrement au casque (`getUserMedia` sans traitement de la voix), calibration de la latence, plusieurs prises | ✅ |
+| 5 | Guide visuel en direct (curseur, pulsation, décompte, syllabes colorées en avance / dans le temps / en retard) + carte de flow (syllabes, accents, silences, syllabes par mesure, accélérations, motifs répétés) | ✅ |
+| 6 | Prise fantôme + comparaison A/B des prises | ✅ |
 | 7 | *(option)* Variantes rythmiques jouées en « ta-ta » : parlé lent, saccadé, mélodique, dense | à faire |
-| 8 | Texte sur la grille : une ligne par mesure, compteur de syllabes en français (plage min–max pour le « e » muet et les élisions « j'suis », « p'tit »), alertes trop long / trop court / mal placé, explication courte du pourquoi. **Sans proposer de mots.** | à faire |
+| 8 | Texte sur la grille : une ligne par mesure, compteur de syllabes en français (plage min–max pour le « e » muet et les élisions « j'suis », « p'tit »), alertes trop long / trop court / mal placé, explication courte du pourquoi. **Sans proposer de mots.** | ✅ |
 
 ## Évolutions possibles de l'analyse
 
@@ -75,8 +75,17 @@ toucher à l'interface :
   l'AudioContext. Si les clics du métronome semblent décalés, il faut ajuster « Calage clic ».
 - **Enregistrement** (étape 4) : casque filaire obligatoire (le Bluetooth ajoute 150 à 300 ms) ; la
   latence est à calibrer une fois par appareil.
-- **Yaourt** (étape 5) : la détection est bonne sur des syllabes nettes (« da / ta »), moins bonne
-  sur un « mmmh » continu. Les comptes de syllabes sont approximatifs (±1 à 2).
+- **Yaourt** : la détection est bonne sur des syllabes nettes (« da / ta »), moins bonne sur un
+  « mmmh » continu (une seule syllabe) ou dans une pièce bruyante. Les comptes de syllabes sont
+  approximatifs (±1 à 2). Les prises s'enregistrent à 1x (la vitesse est remise à 1x) ; écoutées à
+  0,75x, la voix est plus grave.
+- **Comptage du texte** : règles du français écrit, pas un dictionnaire. Les mots étrangers, les
+  sigles, les chiffres et l'argot très déformé peuvent être mal comptés ; « -ent » n'est muet
+  qu'après « ils / elles ». L'accent « de fin de ligne » est la dernière syllabe non muette.
+- **Batterie en trap** : le kick (souvent une 808) change d'une mesure à l'autre ; le motif type le
+  signale au lieu d'afficher des cases (testé sur une prod trap réelle à 84,66 BPM).
+- **Données** : prises et projets restent dans le navigateur (IndexedDB) ; vider les données du
+  site les efface. Une prise de 30 s pèse ~2,6 Mo.
 - **YouTube** : le lecteur intégré ne peut pas être branché sur la Web Audio API, et télécharger
   l'audio est contraire aux conditions de YouTube. Le lien sert seulement de référence. Les prods
   « free » sont en général gratuites pour un usage non commercial uniquement : pour sortir un
