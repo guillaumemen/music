@@ -50,6 +50,19 @@ Puis ouvre <http://localhost:5173> dans Chrome, Edge ou Firefox. **Utilise un ca
 Sous Windows, tu peux aussi double-cliquer sur `Lancer Flowlab.bat` : il démarre le serveur et ouvre
 le navigateur. Ferme la fenêtre noire pour arrêter.
 
+### Avec Docker (Docker Desktop)
+
+```bash
+docker compose up -d --build     # construit l'image flowlab et lance le conteneur
+```
+
+L'app est servie par nginx sur <http://localhost:5173>. Le conteneur redémarre tout seul avec Docker
+Desktop (`restart: unless-stopped`). Pour l'arrêter : `docker compose down`. Après une modification
+du code, relance `docker compose up -d --build`.
+
+Le lanceur `.bat` et le conteneur utilisent tous les deux le port 5173 : n'en lance qu'un à la fois.
+Les prods importées restent dans le navigateur (IndexedDB), pas dans le conteneur.
+
 ## Raccourcis
 
 | Touche | Action |

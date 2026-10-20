@@ -1,0 +1,8 @@
+services:
+  flowlab:
+    build: .
+    image: flowlab:latest
+    container_name: flowlab
+    ports:
+      - "5173:80"
+    restart: unless-stopped
