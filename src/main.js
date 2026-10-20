@@ -7,6 +7,9 @@ import { Player, decodeToMono } from './audio/player.js';
 import { Metronome } from './audio/metronome.js';
 import { AnalysisClient } from './analysis/client.js';
 import { WaveformView, buildPeaks } from './ui/waveform.js';
+import { HIT_THRESHOLD, gridSignature } from './analysis/drums.js';
+import { proposeSections } from './analysis/sections.js';
+import * as S from './core/sections.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -20,6 +23,7 @@ const state = {
   project: null,
   audio: null, // { samples, sampleRate, duration }
   analyzing: false,
+  drumView: 'bar', // 'bar' (mesure en cours) | 'pattern' (motif type)
 };
 
 const overview = new WaveformView($('#overview'), { mode: 'overview' });
@@ -116,6 +120,7 @@ async function importFile(file) {
 
 function closeProject() {
   player.pause();
+  drumsJob++;
   state.project = null;
   state.audio = null;
   $('.tab[data-screen="prod"]').disabled = true;
@@ -174,6 +179,8 @@ function renderProjectInfo() {
   renderYoutubeLink();
   renderMarkers();
   renderBpm();
+  renderSections();
+  renderDrums();
 }
 
 /* ------------------------------------------------------------------ */
@@ -203,7 +210,7 @@ async function runAnalysis({ region = null } = {}) {
   const projectId = state.project.id;
   setProgress(0);
   setAnalysisMessage(region ? 'Détection du tempo sur la boucle…' : 'Détection du tempo…');
-  const result = await analysis.analyze(projectId, slice, sampleRate, { offset, onProgress: setProgress });
+  const result = await analysis.analyze(projectId, slice, sampleRate, { offset, full: !region, onProgress: setProgress });
   state.analyzing = false;
   setProgress(null);
   if (state.project?.id !== projectId) return;
@@ -245,6 +252,8 @@ function applyGrid(g, source, { save = true } = {}) {
   renderBpm();
   renderBeatDots();
   updateZoomLabel();
+  renderSections();
+  scheduleDrums();
   if (save) saveSoon();
 }
 
@@ -289,6 +298,292 @@ function renderBeatDots() {
   if (dots.children.length !== n) {
     dots.replaceChildren(...Array.from({ length: n }, () => document.createElement('span')));
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Batterie : kick / caisse claire sur 16 cases                        */
+/* ------------------------------------------------------------------ */
+
+// L'analyse de batterie dépend de la grille : elle n'est valable que pour la grille actuelle.
+function currentDrums() {
+  const d = state.project?.drums;
+  const g = grid();
+  return d?.ok && g && gridSignature(d.grid) === gridSignature(g) ? d : null;
+}
+
+let drumsTimer = null;
+let drumsJob = 0;
+function scheduleDrums() {
+  clearTimeout(drumsTimer);
+  drumsTimer = setTimeout(requestDrums, 150);
+  renderDrums();
+}
+
+async function requestDrums() {
+  const p = state.project;
+  const g = grid();
+  if (!p || !g || !state.audio || currentDrums()) return renderDrums();
+  const job = ++drumsJob;
+  setDrumMessage('Lecture de la batterie…');
+  const result = await analysis.drums(p.id, g, state.audio);
+  if (job !== drumsJob || state.project !== p) return;
+  if (!result.ok) {
+    setDrumMessage(`Batterie illisible : ${result.reason}`);
+    return;
+  }
+  if (gridSignature(result.grid) !== gridSignature(grid())) return; // grille changée entre-temps
+  p.drums = result;
+  saveSoon();
+  renderDrums();
+}
+
+function setDrumMessage(text) {
+  $('#drum-message').textContent = text;
+}
+
+const stepCount = () => (grid()?.beatsPerBar || 4) * 4;
+
+// Construit la grille : ligne des temps comptés (1 · et · 2 …), puis kick et caisse claire.
+function buildDrumGrid() {
+  const n = stepCount();
+  const root = $('#drum-grid');
+  if (root.dataset.steps === String(n)) return;
+  root.dataset.steps = String(n);
+  const nodes = [];
+  const lane = (text) => {
+    const el = document.createElement('span');
+    el.className = 'lane';
+    el.textContent = text;
+    nodes.push(el);
+  };
+  lane('');
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('span');
+    el.className = 'count';
+    if (i % 4 === 0) el.classList.add('beat', 'beat-start');
+    el.textContent = i % 4 === 0 ? String(i / 4 + 1) : i % 4 === 2 ? 'et' : '·';
+    el.dataset.step = String(i);
+    nodes.push(el);
+  }
+  for (const [key, name] of [['kick', 'Kick'], ['snare', 'Caisse cl.']]) {
+    lane(name);
+    for (let i = 0; i < n; i++) {
+      const el = document.createElement('button');
+      el.className = `cell ${key}`;
+      if (i % 4 === 0) el.classList.add('beat-start');
+      el.dataset.step = String(i);
+      el.dataset.lane = key;
+      nodes.push(el);
+    }
+  }
+  root.replaceChildren(...nodes);
+}
+
+// Dernier état affiché (vue|mesure|case|grille), pour ne toucher au DOM qu'au changement.
+let drumShown = '';
+
+function renderDrums() {
+  drumShown = '';
+  buildDrumGrid();
+  const g = grid();
+  const d = currentDrums();
+  detail.drums = d;
+  $('#section-auto').disabled = !d;
+  if (!g) setDrumMessage('Il faut un BPM pour placer la batterie sur la grille.');
+  else if (!d) setDrumMessage(state.audio ? 'Lecture de la batterie…' : '');
+  else setDrumMessage(describePattern(d.pattern));
+  updateDrumGrid(player.currentTime);
+}
+
+const stepName = (s) => (s % 4 === 0 ? `le ${s / 4 + 1}` : `la case ${s + 1}`);
+
+// Résumé en mots du motif type, plus un conseil si le « 1 » semble décalé.
+function describePattern(pattern) {
+  if (!pattern.bars) return "Pas de batterie nette pour l'instant. Si l'intro est calme, la grille se remplira à l'entrée de la batterie.";
+  const hits = (v) => v.flatMap((x, i) => (x >= HIT_THRESHOLD ? [i] : []));
+  const k = hits(pattern.kick);
+  const sn = hits(pattern.snare);
+  const list = (a) => (a.length ? a.map(stepName).join(', ') : 'rien de net');
+  let text = `Motif type : kick sur ${list(k)} · caisse claire sur ${list(sn)}.`;
+  const on = (i) => sn.includes(i);
+  if (on(4) && on(12)) text += ' Caisse claire sur le 2 et le 4 : le schéma classique du rap.';
+  else if (on(8) && !on(4) && !on(12)) text += ' Caisse claire sur le 3 seulement : prod en half-time (fréquent en trap).';
+  else if ((on(0) || on(8)) && !on(4) && !on(12)) text += " Caisse claire sur le 1 et le 3 : le « 1 » est sûrement décalé d'un temps (← 1 temps / 1 temps →).";
+  return text;
+}
+
+function updateDrumGrid(t) {
+  const g = grid();
+  const d = currentDrums();
+  const n = stepCount();
+  let bar = null, step = -1;
+  if (g) {
+    const pos = G.positionAt(t, g);
+    bar = pos.bar;
+    step = Math.min(n - 1, Math.floor((pos.beat - 1 + pos.fraction) * 4));
+  }
+  const head = `${state.drumView}|${bar}|${d ? gridSignature(d.grid) : ''}`;
+  const key = `${head}|${step}|${player.playing}`;
+  if (key === drumShown) return;
+  const barChanged = !drumShown.startsWith(`${head}|`);
+  drumShown = key;
+
+  const source = !d ? null : state.drumView === 'pattern' ? d.pattern : d.bars[bar] || null;
+  for (const el of $('#drum-grid').children) {
+    if (!el.dataset.step) continue;
+    const i = Number(el.dataset.step);
+    el.classList.toggle('now', i === step && player.playing);
+    if (barChanged && el.dataset.lane) {
+      const v = source ? source[el.dataset.lane][i] || 0 : 0;
+      el.style.setProperty('--v', String(v));
+      el.classList.toggle('hit', v >= HIT_THRESHOLD);
+      const name = el.dataset.lane === 'kick' ? 'Kick' : 'Caisse claire';
+      el.title = `${name}, case ${i + 1} : ${v >= HIT_THRESHOLD ? 'coup' : v >= 0.2 ? 'léger' : 'rien'} (${Math.round(v * 100)} %)`;
+    }
+  }
+  if (barChanged) {
+    const caption = $('#drum-caption');
+    if (!g) caption.textContent = '–';
+    else if (state.drumView === 'pattern') caption.textContent = d ? `Médiane de ${d.pattern.bars} mesures avec batterie` : '';
+    else caption.textContent = bar >= 1 ? `Mesure ${bar}` : 'Avant la mesure 1';
+    renderCurrentSection(bar);
+  }
+}
+
+// Clic sur une case : aller à cet instant de la mesure en cours.
+function seekToStep(step) {
+  const g = grid();
+  if (!g) return;
+  const bar = Math.max(0, G.positionAt(player.currentTime + 0.001, g).bar);
+  player.seek(Math.max(0, G.barStart(bar, g) + (step * G.barDuration(g)) / stepCount()));
+}
+
+/* ------------------------------------------------------------------ */
+/* Sections                                                            */
+/* ------------------------------------------------------------------ */
+
+function lastBar() {
+  const g = grid();
+  return g && state.audio ? Math.max(1, G.positionAt(state.audio.duration - 0.01, g).bar) : 0;
+}
+
+function setSections(list) {
+  state.project.sections = S.normalizeSections(list);
+  renderSections();
+  saveSoon();
+}
+
+function sectionTimes(ranges) {
+  const g = grid();
+  return ranges.map((r) => ({
+    a: G.barStart(r.startBar, g),
+    b: Math.min(state.audio?.duration ?? Infinity, G.barStart(r.endBar, g)),
+    label: r.label,
+    color: S.sectionColor(r.label),
+  }));
+}
+
+function renderSections() {
+  const p = state.project;
+  if (!p) return;
+  const g = grid();
+  const ranges = g ? S.sectionRanges(p.sections, lastBar()) : [];
+  detail.sections = overview.sections = sectionTimes(ranges);
+  $('#section-add').disabled = !g;
+
+  const list = $('#section-list');
+  list.replaceChildren();
+  $('#section-empty').hidden = ranges.length > 0;
+  for (const r of ranges) {
+    const li = document.createElement('li');
+    li.dataset.id = r.id;
+    li.style.setProperty('--tag', S.sectionColor(r.label));
+    const swatch = document.createElement('span');
+    swatch.className = 'swatch';
+    const name = document.createElement('input');
+    name.className = 'name';
+    name.value = r.label;
+    name.placeholder = 'Nom';
+    name.setAttribute('list', 'section-labels');
+    name.setAttribute('aria-label', 'Nom de la section');
+    name.oninput = () => {
+      p.sections = S.renameSection(p.sections, r.id, name.value);
+      li.style.setProperty('--tag', S.sectionColor(name.value));
+      detail.sections = overview.sections = sectionTimes(S.sectionRanges(p.sections, lastBar()));
+      drumShown = '';
+      saveSoon();
+    };
+    const bars = document.createElement('span');
+    bars.className = 'bars';
+    const start = document.createElement('input');
+    start.type = 'number';
+    start.min = '1';
+    start.value = String(r.startBar);
+    start.title = 'Mesure de début';
+    start.setAttribute('aria-label', 'Mesure de début');
+    start.onchange = () => setSections(S.moveSection(p.sections, r.id, Number(start.value)));
+    const len = document.createElement('span');
+    len.textContent = `· ${r.endBar - r.startBar} mes.`;
+    bars.append('mes.', start, len);
+    const actions = document.createElement('span');
+    actions.className = 'actions';
+    const button = (text, title, onclick, extra = '') => {
+      const b = document.createElement('button');
+      b.className = `btn small ${extra}`;
+      b.textContent = text;
+      b.title = title;
+      b.setAttribute('aria-label', title);
+      b.onclick = onclick;
+      return b;
+    };
+    actions.append(
+      button('▶', 'Aller au début de la section', () => player.seek(G.barStart(r.startBar, g))),
+      button('⟳', 'Boucler la section', () => {
+        const [{ a, b }] = sectionTimes([r]);
+        applyLoop({ a, b, enabled: true });
+        player.seek(a);
+      }),
+      button('✕', 'Supprimer (la section précédente se rallonge)', () => setSections(S.removeSection(p.sections, r.id)), 'danger'),
+    );
+    li.append(swatch, name, bars, actions);
+    list.append(li);
+  }
+  drumShown = '';
+}
+
+function renderCurrentSection(bar) {
+  const p = state.project;
+  const tag = $('#drum-section');
+  const s = p && bar !== null ? S.sectionAtBar(p.sections, bar) : null;
+  tag.hidden = !s || state.drumView === 'pattern';
+  if (s) {
+    tag.textContent = s.label || 'Sans nom';
+    tag.style.setProperty('--tag', S.sectionColor(s.label));
+  }
+  for (const li of $('#section-list').children) li.classList.toggle('current', li.dataset.id === s?.id);
+}
+
+function addSectionHere() {
+  const g = grid();
+  if (!g) {
+    toast('Il faut un BPM pour placer des sections.');
+    return;
+  }
+  const bar = Math.max(1, G.positionAt(player.currentTime + 0.02, g).bar);
+  setSections(S.splitAt(state.project.sections, bar));
+}
+
+function proposeSectionsNow() {
+  const d = currentDrums();
+  if (!d) {
+    toast('La batterie est encore en cours de lecture, réessaie dans un instant.');
+    return;
+  }
+  if (state.project.sections.length && !confirm('Remplacer les sections actuelles par la proposition ?')) return;
+  const proposal = proposeSections(d);
+  setSections(proposal);
+  const n = proposal.length;
+  toast(`${n} section${n > 1 ? 's' : ''} proposée${n > 1 ? 's' : ''}. Renomme-les (couplet, refrain…) et corrige les débuts si besoin.`, 5000);
 }
 
 /* ------------------------------------------------------------------ */
@@ -483,6 +778,7 @@ function frame() {
   } else {
     $('#bar-num').textContent = '–';
   }
+  updateDrumGrid(t);
 }
 
 // La boucle est aussi surveillée hors affichage pour un retour plus précis.
@@ -615,6 +911,24 @@ function bind() {
   // Repères
   $('#marker-add').onclick = () => addMarker();
 
+  // Batterie et sections
+  for (const b of $$('[data-drumview]')) {
+    b.onclick = () => {
+      state.drumView = b.dataset.drumview;
+      for (const x of $$('[data-drumview]')) x.setAttribute('aria-pressed', String(x === b));
+      drumShown = '';
+    };
+  }
+  $('#drum-grid').addEventListener('click', (e) => {
+    const cell = e.target.closest('[data-step]');
+    if (cell) seekToStep(Number(cell.dataset.step));
+  });
+  $('#section-add').onclick = addSectionHere;
+  $('#section-auto').onclick = proposeSectionsNow;
+  $('#section-labels').replaceChildren(
+    ...S.SECTION_LABELS.map((l) => Object.assign(document.createElement('option'), { value: l })),
+  );
+
   document.addEventListener('keydown', onKey);
 }
 
@@ -653,6 +967,7 @@ function onKey(e) {
     },
     t: doTap,
     m: () => addMarker(),
+    n: addSectionHere,
   };
   const action = actions[key];
   if (action) {
@@ -679,5 +994,6 @@ function saveSettings(patch) {
 
 bind();
 renderBeatDots();
+buildDrumGrid();
 renderProjects();
 requestAnimationFrame(frame);

@@ -1,6 +1,7 @@
 // Génère une « prod » synthétique : kick sur 1 et 3+, caisse claire sur 2 et 4,
 // charley en croches, nappe tenue. Permet de vérifier la détection sans fichier audio.
-export function synthBeat({ bpm, downbeat = 0, duration = 30, sampleRate = 44100, seed = 1, swing = 0, intro = 0 }) {
+// `muted(bar)` : coupe la batterie sur certaines mesures (bar = 1 pour la mesure du premier « 1 »).
+export function synthBeat({ bpm, downbeat = 0, duration = 30, sampleRate = 44100, seed = 1, swing = 0, intro = 0, muted = () => false }) {
   const n = Math.floor(duration * sampleRate);
   const out = new Float32Array(n);
   let s = seed;
@@ -31,7 +32,7 @@ export function synthBeat({ bpm, downbeat = 0, duration = 30, sampleRate = 44100
   for (let bar = firstBar; ; bar++) {
     const t0 = downbeat + bar * 4 * beat;
     if (t0 > duration) break;
-    if (t0 < intro) continue;
+    if (t0 < intro || muted(bar + 1)) continue;
     addKick(t0);
     addKick(t0 + 2.5 * beat);
     addNoise(t0 + beat, 0.18, 0.55, 18);

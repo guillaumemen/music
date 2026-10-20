@@ -86,6 +86,37 @@
           </div>
         </div>
 
+        <div class="cols-2">
+          <!-- Batterie : kick / caisse claire sur 16 cases -->
+          <div class="panel drum-panel">
+            <div class="panel-head">
+              <h3>Batterie <span class="h3-sub">16 cases par mesure</span></h3>
+              <div class="seg" role="group" aria-label="Affichage de la batterie">
+                <button class="seg-btn" data-drumview="bar" aria-pressed="true" title="La mesure jouée, en direct">Mesure en cours</button>
+                <button class="seg-btn" data-drumview="pattern" aria-pressed="false" title="Le schéma qui revient le plus souvent">Motif type</button>
+              </div>
+            </div>
+            <div class="drum-where">
+              <span class="section-tag" id="drum-section" hidden></span>
+              <span class="dim small" id="drum-caption">–</span>
+            </div>
+            <div class="drum-grid" id="drum-grid" aria-label="Grille de batterie : kick et caisse claire"></div>
+            <p class="small dim drum-message" id="drum-message"></p>
+          </div>
+
+          <!-- Sections -->
+          <div class="panel">
+            <h3>Sections</h3>
+            <div class="row">
+              <button class="btn" id="section-add" title="Nouvelle section à partir de la mesure en cours (N)">+ Section ici <kbd>N</kbd></button>
+              <button class="btn" id="section-auto" title="Repère les changements de la prod (batterie, niveau, brillance)">Proposer</button>
+            </div>
+            <ul class="section-list" id="section-list"></ul>
+            <p class="small dim" id="section-empty">Découpe la prod en parties (intro, couplet, refrain…). Place la tête de lecture et ajoute une section, ou laisse « Proposer » repérer les changements : tu valides ou tu corriges ensuite.</p>
+            <datalist id="section-labels"></datalist>
+          </div>
+        </div>
+
         <div class="cols">
           <!-- BPM & grille -->
           <div class="panel">
@@ -184,6 +215,7 @@
         <dt><kbd>K</kbd></dt><dd>Métronome</dd>
         <dt><kbd>T</kbd></dt><dd>Tap tempo</dd>
         <dt><kbd>M</kbd></dt><dd>Ajouter un repère</dd>
+        <dt><kbd>N</kbd></dt><dd>Nouvelle section à la mesure en cours</dd>
         <dt><kbd>Home</kbd></dt><dd>Retour au début</dd>
       </dl>
       <form method="dialog"><button class="btn">Fermer</button></form>

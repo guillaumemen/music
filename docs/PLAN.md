@@ -33,7 +33,7 @@ de rimes, pas de réécriture). L'app compte et place ; c'est toi qui écris.
 | 0 | Squelette, thème sombre, stockage local des projets | ✅ |
 | 1 | Import, forme d'onde, lecture, boucle, 0,75x / 1x, repères | ✅ |
 | 2 | BPM auto + confiance + ÷2 / ×2 + tap + métronome + grille de mesures | ✅ |
-| 3 | Kick et caisse claire affichés sur une grille 16 cases par mesure + sections (intro, couplet…) calées sur les mesures | à faire |
+| 3 | Kick et caisse claire affichés sur une grille 16 cases par mesure + sections (intro, couplet…) calées sur les mesures | ✅ |
 | 4 | Enregistrement au casque (`getUserMedia` sans traitement de la voix), calibration de la latence, plusieurs prises | à faire |
 | 5 | Guide visuel en direct (curseur, pulsation, décompte, syllabes colorées en avance / dans le temps / en retard) + carte de flow (syllabes, accents, silences, syllabes par mesure, accélérations, motifs répétés) | à faire |
 | 6 | Prise fantôme + comparaison A/B des prises | à faire |
@@ -49,7 +49,8 @@ toucher à l'interface :
 - tempo variable : suivi des temps par programmation dynamique, si une prod n'est pas calée sur
   une grille fixe ;
 - tonalité : chroma + profils de Krumhansl ;
-- sections : nouveauté spectrale toutes les 4 ou 8 mesures, proposée puis validée par l'utilisateur ;
+- sections : la proposition actuelle (étape 3) compare niveau, brillance et batterie par blocs de
+  4 mesures ; on pourrait y ajouter le chroma pour repérer un changement d'accords à batterie égale ;
 - voix : noyaux syllabiques (énergie + voisement), accents (énergie + hauteur + durée).
 
 ## Limites techniques
@@ -60,6 +61,14 @@ toucher à l'interface :
 - **Le « 1 »** se déduit du schéma « kick sur 1, caisse claire sur 2 et 4 ». Les prods trap (caisse
   claire sur le 3 en half-time) ou très syncopées peuvent le décaler d'un temps : il faut alors
   utiliser « ← 1 temps / 1 temps → ».
+- **Batterie** : pensée pour un kick net dans le grave et une caisse claire (ou un clap) dans le
+  médium. Une 808 longue et grave compte comme un kick à chaque attaque ; un clap superposé à la
+  caisse claire est vu comme un seul coup ; les charleys ne sont pas affichés (ils restent en cases
+  pâles côté caisse claire s'ils sont forts). Si la grille est fausse (BPM ou « 1 »), les coups
+  tombent entre les cases : corriger la grille d'abord.
+- **Sections proposées** : fiables sur les changements nets (batterie qui entre ou qui coupe, gros
+  écart de niveau). Un refrain qui ne change que les accords ou la voix n'est pas repéré, et les
+  noms (couplet, refrain) restent à donner à la main.
 - **Tempo variable** (prod jouée sans clic, sample non calé) : la grille fixe dérive. Cas rare pour
   des prods produites dans un logiciel de MAO.
 - **Synchro** : l'élément `<audio>` avance par à-coups ; l'horloge est donc extrapolée à partir de

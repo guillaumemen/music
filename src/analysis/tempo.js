@@ -60,25 +60,46 @@ export function onsetFeatures(samples, sampleRate, options = {}) {
   const midMin = Math.round(200 / binHz);
   const midMax = Math.min(bins, Math.round(5000 / binHz));
 
+  const highMin = Math.min(bins, Math.round(5000 / binHz));
+
   const nFrames = samples.length >= frameSize ? Math.floor((samples.length - frameSize) / hopSize) + 1 : 0;
   const full = new Float32Array(nFrames);
   const low = new Float32Array(nFrames);
   const mid = new Float32Array(nFrames);
+  // Niveau (RMS) et brillance (part du spectre au-dessus de 5 kHz) : servent aux sections.
+  const rms = new Float32Array(nFrames);
+  const bright = new Float32Array(nFrames);
+  // Flux en magnitude linéaire (sans log) : garde l'écart de force entre une caisse claire et un
+  // charley, que le log écrase. Sert à la grille de batterie.
+  const lowLin = new Float32Array(nFrames);
+  const midLin = new Float32Array(nFrames);
 
   const re = new Float64Array(frameSize);
   const im = new Float64Array(frameSize);
   const prev = new Float64Array(bins + 1);
+  const prevLin = new Float64Array(bins + 1);
 
   for (let f = 0; f < nFrames; f++) {
     const start = f * hopSize;
+    let energy = 0;
     for (let i = 0; i < frameSize; i++) {
       re[i] = samples[start + i] * win[i];
       im[i] = 0;
+      energy += re[i] * re[i];
     }
     fft(re, im);
-    let sFull = 0, sLow = 0, sMid = 0;
+    let sFull = 0, sLow = 0, sMid = 0, linAll = 0, linHigh = 0, lLow = 0, lMid = 0;
     for (let b = 1; b <= bins; b++) {
-      const mag = Math.log1p(100 * Math.hypot(re[b], im[b]));
+      const lin = Math.hypot(re[b], im[b]);
+      linAll += lin;
+      if (b >= highMin) linHigh += lin;
+      const dl = lin - prevLin[b];
+      prevLin[b] = lin;
+      if (dl > 0 && f > 0) {
+        if (b <= lowMax) lLow += dl;
+        else if (b >= midMin && b <= midMax) lMid += dl;
+      }
+      const mag = Math.log1p(100 * lin);
       const d = mag - prev[b];
       prev[b] = mag;
       if (d <= 0 || f === 0) continue;
@@ -89,6 +110,10 @@ export function onsetFeatures(samples, sampleRate, options = {}) {
     full[f] = sFull;
     low[f] = sLow;
     mid[f] = sMid;
+    lowLin[f] = lLow;
+    midLin[f] = lMid;
+    rms[f] = Math.sqrt(energy / frameSize);
+    bright[f] = linAll > 0 ? linHigh / linAll : 0;
   }
 
   return {
@@ -97,6 +122,10 @@ export function onsetFeatures(samples, sampleRate, options = {}) {
     full,
     low,
     mid,
+    rms,
+    bright,
+    lowLin,
+    midLin,
   };
 }
 
@@ -217,7 +246,7 @@ export function fitGrid(env, frameRate, bpmGuess, { range = 1.5 } = {}) {
   return { bpm: best.bpm, phaseFrames: best.phase, score: best.score };
 }
 
-function peakNear(env, pos, radius = 2) {
+export function peakNear(env, pos, radius = 2) {
   let m = 0;
   for (let p = Math.round(pos) - radius; p <= Math.round(pos) + radius; p++) {
     if (p >= 0 && p < env.length && env[p] > m) m = env[p];

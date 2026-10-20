@@ -17,7 +17,8 @@ export function newProject(file) {
     youtubeUrl: '',
     markers: [], // { id, time, label }
     loop: { a: 0, b: 0, enabled: false },
-    sections: [], // étape 3
+    sections: [], // { id, startBar, label } : voir core/sections.js
+    drums: null, // kick / caisse claire en 16 cases pour une grille donnée (analysis/drums.js)
     takes: [], // étape 4
   };
 }

@@ -1,6 +1,7 @@
 // Forme d'onde + grille rythmique sur <canvas>.
 // Deux vues partagent ce composant : l'aperçu (morceau entier) et la vue détaillée (zoom).
-import { beatsInRange, isValidGrid, barDuration, snapToBar, snapToBeat } from '../core/grid.js';
+import { beatsInRange, isValidGrid, barDuration, barStart, snapToBar, snapToBeat } from '../core/grid.js';
+import { HIT_THRESHOLD } from '../analysis/drums.js';
 
 const BLOCK = 256; // échantillons par bloc min/max précalculé
 
@@ -36,6 +37,8 @@ export class WaveformView extends EventTarget {
     this.peaks = null;
     this.grid = null;
     this.markers = [];
+    this.sections = []; // [{ a, b, label, color }] en secondes
+    this.drums = null; // résultat de analyzeDrums, valable pour this.grid
     this.loop = null;
     this.playhead = 0;
     this.view = { start: 0, duration: 10 };
@@ -129,6 +132,29 @@ export class WaveformView extends EventTarget {
       g.fillRect(x0, 0, x1 - x0, h);
     }
 
+    // Sections : bandeau en haut (avec le nom dans la vue détaillée)
+    const band = this.sections.length ? (this.mode === 'detail' ? 17 : 5) : 0;
+    for (const s of this.sections) {
+      const x0 = Math.max(0, this.timeToX(s.a)), x1 = Math.min(w, this.timeToX(s.b));
+      if (x1 <= 0 || x0 >= w) continue;
+      g.fillStyle = s.color;
+      g.globalAlpha = 0.07;
+      g.fillRect(x0, 0, x1 - x0, h);
+      g.globalAlpha = 0.85;
+      g.fillRect(x0, 0, x1 - x0 - 1, band);
+      g.globalAlpha = 1;
+      if (this.mode === 'detail' && x1 - x0 > 24) {
+        g.save();
+        g.beginPath();
+        g.rect(x0, 0, x1 - x0 - 4, band);
+        g.clip();
+        g.fillStyle = '#14121f';
+        g.font = '600 11px system-ui, sans-serif';
+        g.fillText(s.label || 'Sans nom', Math.max(x0, 0) + 5, 12);
+        g.restore();
+      }
+    }
+
     // Grille : temps, mesures, numéros (densité adaptée au zoom)
     if (isValidGrid(this.grid)) {
       const t0 = this.view.start, t1 = t0 + this.view.duration;
@@ -149,7 +175,7 @@ export class WaveformView extends EventTarget {
           g.stroke();
           if (this.mode === 'detail' && beat.bar >= 1) {
             g.fillStyle = cssVar(this.canvas, '--text-dim');
-            g.fillText(String(beat.bar), x + 3, 12);
+            g.fillText(String(beat.bar), x + 3, band + 12);
           }
         } else if (showBeats) {
           g.strokeStyle = cssVar(this.canvas, '--grid-beat');
@@ -162,6 +188,7 @@ export class WaveformView extends EventTarget {
     }
 
     g.drawImage(this.#drawWave(), 0, 0, w, h);
+    if (this.mode === 'detail') this.#drawDrums(g);
 
     // Rectangle de la vue détaillée (dans l'aperçu)
     if (this.detailView) {
@@ -190,7 +217,7 @@ export class WaveformView extends EventTarget {
       g.fill();
       if (this.mode === 'detail' && m.label) {
         g.font = '11px system-ui, sans-serif';
-        g.fillText(m.label, x + 6, h - 6);
+        g.fillText(m.label, x + 6, h - 30);
       }
     }
 
@@ -202,6 +229,37 @@ export class WaveformView extends EventTarget {
     g.moveTo(px, 0);
     g.lineTo(px, h);
     g.stroke();
+  }
+
+  // Coups de kick (ronds, en bas) et de caisse claire (carrés, juste au-dessus).
+  #drawDrums(g) {
+    const d = this.drums;
+    if (!d || !isValidGrid(this.grid)) return;
+    const barSec = barDuration(this.grid);
+    const stepSec = barSec / d.steps;
+    if ((stepSec / this.view.duration) * this.width < 3) return; // trop dézoomé : illisible
+    const t0 = this.view.start, t1 = t0 + this.view.duration;
+    const first = Math.max(0, Math.floor((t0 - this.grid.downbeat) / barSec) + 1);
+    const kick = cssVar(this.canvas, '--kick'), snare = cssVar(this.canvas, '--snare');
+    for (let bar = first; bar < d.bars.length; bar++) {
+      const start = barStart(bar, this.grid);
+      if (start > t1) break;
+      const { kick: k, snare: s } = d.bars[bar];
+      for (let i = 0; i < d.steps; i++) {
+        const x = this.timeToX(start + i * stepSec);
+        if (x < -4 || x > this.width + 4) continue;
+        if (k[i] >= HIT_THRESHOLD) {
+          g.fillStyle = kick;
+          g.beginPath();
+          g.arc(x, this.height - 8, 3.5, 0, Math.PI * 2);
+          g.fill();
+        }
+        if (s[i] >= HIT_THRESHOLD) {
+          g.fillStyle = snare;
+          g.fillRect(x - 3, this.height - 22, 6, 6);
+        }
+      }
+    }
   }
 
   // Clic = aller à. Glisser (vue détaillée) = sélectionner une boucle, aimantée aux
